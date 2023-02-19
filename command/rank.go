@@ -2,11 +2,13 @@ package command
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"wordle/words"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // const (
@@ -16,7 +18,8 @@ import (
 type rankCommand struct {
 	dictionary    string
 	excluded      string
-	includes      []string
+	matched       string
+	wrongPosition []string
 	exactPosition string
 	targets       []string
 	// vowels        bool
@@ -26,8 +29,9 @@ func NewRank(app Commander) (string, RunFunc) {
 	var args rankCommand
 	cmd := app.Command("rank", "rank words based on strategy")
 	cmd.Flag("dictionary", "file from which to read dictionary words").Default("five-letter-words.txt").StringVar(&args.dictionary)
-	cmd.Flag("include", "leters that must be present, but not in position specified").Short('i').StringsVar(&args.includes)
-	cmd.Flag("exclude", "leters that are not part of the target word").Short('e').StringVar(&args.excluded)
+	cmd.Flag("match", "show wods that contain all of these letters").Short('m').StringVar(&args.matched)
+	cmd.Flag("include", "letters that must be present, but not in position specified").Short('i').StringsVar(&args.wrongPosition)
+	cmd.Flag("exclude", "letters that are not part of the target word").Short('e').StringVar(&args.excluded)
 	cmd.Flag("exact", "word containing letters in exact positions using space for unknown. Example ' a  e'").Short('x').StringVar(&args.exactPosition)
 	cmd.Flag("target", "words for which verbose logging should be enabled").Short('t').StringsVar(&args.targets)
 	// cmd.Flag("vowels", "rank vowels more important").BoolVar(&args.vowels)
@@ -35,9 +39,8 @@ func NewRank(app Commander) (string, RunFunc) {
 }
 
 func (cmd *rankCommand) Run() error {
-	// TODO: need a better approach to setting this - a way to select the logger based on either the word
-	// or a generate verbose flag.
-	logrus.SetLevel(logrus.DebugLevel)
+	// TODO: configure log level
+	log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).Level(zerolog.InfoLevel)
 
 	if err := cmd.validate(); err != nil {
 		return err
@@ -81,6 +84,9 @@ func (cmd *rankCommand) validate() error {
 			return fmt.Errorf("invalid target word [%s]", word)
 		}
 	}
+	if cmd.matched != "" && !words.ValidExclude.MatchString(cmd.matched) {
+		return fmt.Errorf("match string [%s] contains invalid character(s)", cmd.matched)
+	}
 	if cmd.excluded != "" && !words.ValidExclude.MatchString(cmd.excluded) {
 		return fmt.Errorf("exclude string [%s] contains invalid character(s)", cmd.excluded)
 	}
@@ -91,7 +97,7 @@ func (cmd *rankCommand) validate() error {
 		return fmt.Errorf("exact [%s] contains excluded character(s)", cmd.exactPosition)
 	}
 	runes := []rune(cmd.exactPosition)
-	for _, word := range cmd.includes {
+	for _, word := range cmd.wrongPosition {
 		if !words.ValidInclude.MatchString(word) {
 			return fmt.Errorf("include [%s] contains invalid character(s)", word)
 		}
@@ -110,38 +116,36 @@ func (cmd *rankCommand) validate() error {
 	return nil
 }
 
-func (cmd *rankCommand) verbose(word *words.Word) bool {
-	for _, w := range cmd.targets {
+func updateLogger(word *words.Word, targets []string) {
+	for _, w := range targets {
 		if word.Text == w {
-			return true
+			zerolog.SetGlobalLevel(zerolog.DebugLevel)
+			return
 		}
 	}
-	return false
+	// TODO: restore original level
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 }
 
 func (cmd *rankCommand) filterWord(word *words.Word) bool {
-	verbose := cmd.verbose(word)
-	if words.Excluded(word, cmd.excluded, verbose) {
-		if verbose {
-			logrus.Infof("excluded ")
-		}
+	updateLogger(word, cmd.targets)
+	if !words.Matched(word, cmd.matched) {
+		log.Debug().Str("word", word.Text).Msg("match filter")
 		return false
 	}
-	if !words.Contains(word, cmd.includes, verbose) {
-		if verbose {
-			logrus.Infof("contains ")
-		}
+	if words.Excluded(word, cmd.excluded) {
+		log.Debug().Str("word", word.Text).Msg("excluded filter")
 		return false
 	}
-	if !words.ContainsExact(word, cmd.exactPosition, verbose) {
-		if verbose {
-			logrus.Infof("exact ")
-		}
+	if !words.Contains(word, cmd.wrongPosition) {
+		log.Debug().Str("word", word.Text).Msg("contains filter")
 		return false
 	}
-	if verbose {
-		logrus.Infof("word %s should be included ", word.Text)
+	if !words.ContainsExact(word, cmd.exactPosition) {
+		log.Debug().Str("word", word.Text).Msg("exact filter")
+		return false
 	}
+	log.Debug().Str("word", word.Text).Msg("included")
 	return true
 }
 

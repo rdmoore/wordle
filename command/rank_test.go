@@ -45,7 +45,7 @@ func TestValidate(t *testing.T) {
 	t.Run("Overlaps", func(t *testing.T) {
 		cmd := rankCommand{
 			exactPosition: "brace",
-			includes:      []string{"  a  "},
+			wrongPosition: []string{"  a  "},
 		}
 		err := cmd.validate()
 		assert.Error(t, err)

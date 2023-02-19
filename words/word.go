@@ -8,7 +8,7 @@ import (
 
 	"wordle/file"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -90,16 +90,15 @@ func LoadWords(filename string, filter func(*Word) bool) ([]*Word, error) {
 	return words, err
 }
 
-func ContainsExact(word *Word, required string, verbose bool) bool {
+func ContainsExact(word *Word, required string) bool {
 	for i, ch := range required {
 		switch ch {
 		case ' ', '.':
 			continue // supported 'nil' characters
 		}
 		if word.AsRunes[i] != ch {
-			if verbose {
-				logrus.Debugf("word [%s] does not contain required char [%c] at position %d", word, ch, i)
-			}
+			log.Debug().Str("word", word.Text).Int("position", i).
+				Msg("word does not contain required char")
 			return false
 		}
 	}
@@ -110,23 +109,21 @@ func ContainsExact(word *Word, required string, verbose bool) bool {
 // as long as the characters are not in the explicit position of the character in one
 // of the required. Space (' ') and period ('.') in the "required" strings are ignored
 // to allow the caller to supply positional 'nil' characters.
-func Contains(word *Word, required []string, verbose bool) bool {
+func Contains(word *Word, required []string) bool {
 	for _, req := range required {
 		for i, r := range req {
 			switch r {
 			case ' ', '.':
-				continue // supported 'nil' characters
+				continue // ok - the string contains one of the supported 'nil' character
 			}
 			if !strings.ContainsRune(word.Text, r) {
-				if verbose {
-					logrus.Debugf("word [%s] does not contain required characters [%c]", word, r)
-				}
+				log.Debug().Str("word", word.Text).Str("required", req).Int("index", i).
+					Msg("word does not contain required characters")
 				return false
 			}
 			if word.AsRunes[i] == r {
-				if verbose {
-					logrus.Debugf("word [%s] contains [%c] in position [%d]", word, r, i)
-				}
+				log.Debug().Str("word", word.Text).Str("char", req[i:i+1]).Int("index", i).
+					Msg("word contains character disallowed at explicit index")
 				return false
 			}
 		}
@@ -134,12 +131,20 @@ func Contains(word *Word, required []string, verbose bool) bool {
 	return true
 }
 
-func Excluded(word *Word, excluded string, verbose bool) bool {
+func Matched(word *Word, match string) bool {
+	for _, r := range match {
+		if !strings.ContainsRune(word.Text, r) {
+			return false
+		}
+	}
+	return true
+}
+
+func Excluded(word *Word, excluded string) bool {
 	if excluded == "" || !strings.ContainsAny(word.Text, excluded) {
 		return false
 	}
-	if verbose {
-		logrus.Debugf("word [%s] contains one or more excluded characters [%s]", word, excluded)
-	}
+	log.Debug().Str("word", word.Text).
+		Msg("word contains one or more excluded characters")
 	return true
 }

@@ -17,14 +17,20 @@ func TestRegexp(t *testing.T) {
 }
 
 func TestContainsAll(t *testing.T) {
-	assert.True(t, Contains(MustNew(t, "lined"), []string{"el   "}, false))
-	assert.True(t, Contains(MustNew(t, "lined"), []string{"elidn"}, false))
-	assert.False(t, Contains(MustNew(t, "lined"), []string{"llnni"}, false))
-	assert.False(t, Contains(MustNew(t, "lined"), []string{"    d"}, false))
+	assert.True(t, Contains(MustNew(t, "lined"), []string{"el   "}))
+	assert.True(t, Contains(MustNew(t, "lined"), []string{"elidn"}))
+	assert.False(t, Contains(MustNew(t, "lined"), []string{"llnni"}))
+	assert.False(t, Contains(MustNew(t, "lined"), []string{"    d"}))
 }
 
 func MustNew(t *testing.T, text string) *Word {
 	w, err := New(text)
 	require.NoError(t, err)
 	return w
+}
+
+func TestSlice(t *testing.T) {
+	s := "abcdefghi"
+	assert.Equal(t, "a", s[0:1])
+	assert.Equal(t, "b", s[1:2])
 }
